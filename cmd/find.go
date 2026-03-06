@@ -26,7 +26,8 @@ var findCmd = &cobra.Command{
 	Use:   "find",
 	Short: "Find Azure regions with available VM capacity",
 	Long:  "Search Azure regions for VM SKU availability and sufficient vCPU quota.",
-	RunE:  runFind,
+	SilenceUsage: true,
+	RunE:         runFind,
 }
 
 func init() {
@@ -75,16 +76,13 @@ func runFind(cmd *cobra.Command, args []string) error {
 
 	slog.Info("using subscriptions", "count", len(subs))
 
-	// Resolve regions (use the first subscription to list regions if needed).
+	// Resolve regions.
 	var regionFilter []string
 	if regionsFlag != "" {
 		regionFilter = splitAndTrim(regionsFlag)
 	}
 
-	regions, err := azure.ListRegions(ctx, cred, subs[0], regionFilter)
-	if err != nil {
-		return err
-	}
+	regions := azure.ListRegions(regionFilter)
 
 	slog.Info("checking regions", "count", len(regions))
 

@@ -1,50 +1,84 @@
 package azure
 
-import (
-	"context"
-	"fmt"
-	"log/slog"
+import "log/slog"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions"
-)
+// allRegions is a hardcoded list of all Azure physical regions.
+// This avoids an API call and the subscription-level permission it requires.
+// Last updated: 2026-03-06.
+var allRegions = []string{
+	"australiacentral",
+	"australiacentral2",
+	"australiaeast",
+	"australiasoutheast",
+	"austriaeast",
+	"belgiumcentral",
+	"brazilsouth",
+	"brazilsoutheast",
+	"canadacentral",
+	"canadaeast",
+	"centralindia",
+	"centralus",
+	"centraluseuap",
+	"chilecentral",
+	"denmarkeast",
+	"eastasia",
+	"eastus",
+	"eastus2",
+	"eastus2euap",
+	"eastusstg",
+	"francecentral",
+	"francesouth",
+	"germanynorth",
+	"germanywestcentral",
+	"indonesiacentral",
+	"israelcentral",
+	"italynorth",
+	"japaneast",
+	"japanwest",
+	"jioindiacentral",
+	"jioindiawest",
+	"koreacentral",
+	"koreasouth",
+	"malaysiawest",
+	"mexicocentral",
+	"newzealandnorth",
+	"northcentralus",
+	"northeurope",
+	"norwayeast",
+	"norwaywest",
+	"polandcentral",
+	"qatarcentral",
+	"southafricanorth",
+	"southafricawest",
+	"southcentralus",
+	"southcentralusstg",
+	"southeastasia",
+	"southindia",
+	"spaincentral",
+	"swedencentral",
+	"switzerlandnorth",
+	"switzerlandwest",
+	"uaecentral",
+	"uaenorth",
+	"uksouth",
+	"ukwest",
+	"westcentralus",
+	"westeurope",
+	"westindia",
+	"westus",
+	"westus2",
+	"westus3",
+}
 
 // ListRegions returns the list of Azure regions to check.
 // If a filter is provided, those regions are returned directly.
-// Otherwise, all regions for the subscription are queried via the API.
-func ListRegions(ctx context.Context, cred azcore.TokenCredential, subscriptionID string, filter []string) ([]string, error) {
+// Otherwise, the hardcoded list of all Azure physical regions is returned.
+func ListRegions(filter []string) []string {
 	if len(filter) > 0 {
 		slog.Debug("using provided region filter", "regions", filter)
-		return filter, nil
+		return filter
 	}
 
-	client, err := armsubscriptions.NewClient(cred, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create subscriptions client: %w", err)
-	}
-
-	var regions []string
-	pager := client.NewListLocationsPager(subscriptionID, nil)
-
-	for pager.More() {
-		page, err := pager.NextPage(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list locations: %w", err)
-		}
-
-		for _, loc := range page.Value {
-			if loc.Type == nil || *loc.Type != armsubscriptions.LocationTypeRegion {
-				continue
-			}
-
-			if loc.Name == nil {
-				continue
-			}
-
-			regions = append(regions, *loc.Name)
-		}
-	}
-
-	slog.Debug("discovered Azure regions", "count", len(regions))
-	return regions, nil
+	slog.Debug("using all Azure regions", "count", len(allRegions))
+	return allRegions
 }
