@@ -23,6 +23,7 @@ var (
 	createScaleFlag         int
 	createPrefixFlag        string
 	createParallelismFlag   int
+	createForceFlag         bool
 )
 
 var createCmd = &cobra.Command{
@@ -46,6 +47,7 @@ func init() {
 	createCmd.Flags().IntVar(&createScaleFlag, "scale", 1, "Number of VM instances in the VMSS")
 	createCmd.Flags().StringVar(&createPrefixFlag, "prefix", "acf", "Prefix for all resource names (RG, VNet, VMSS)")
 	createCmd.Flags().IntVar(&createParallelismFlag, "parallelism", 3, "Max concurrent region checks (quota phase only)")
+	createCmd.Flags().BoolVar(&createForceFlag, "force", false, "Skip capacity/quota checks and attempt VMSS creation directly")
 
 	if err := createCmd.MarkFlagRequired("sku"); err != nil {
 		panic(fmt.Sprintf("failed to mark flag required: %v", err))
@@ -98,20 +100,6 @@ func runCreate(cmd *cobra.Command, args []string) error {
 
 	slog.Info("checking regions", "count", len(regions))
 
-	// Run capacity checks (reuse find logic).
-	input := &capacity.CheckInput{
-		Subscriptions: subs,
-		VMSKUs:        []string{skuName},
-		Regions:       regions,
-		Scale:         createScaleFlag,
-		Parallelism:   createParallelismFlag,
-	}
-
-	results := capacity.Run(ctx, cred, input)
-
-	// Display quota results (reuse find output).
-	output.PrintResults(results, verbose)
-
 	// Filter to regions with capacity, sorted by region name.
 	type regionCandidate struct {
 		region       string
@@ -120,12 +108,39 @@ func runCreate(cmd *cobra.Command, args []string) error {
 
 	var candidates []regionCandidate
 
-	for _, r := range results {
-		if r.HasCapacity() {
-			candidates = append(candidates, regionCandidate{
-				region:       r.Region,
-				subscription: r.Subscription,
-			})
+	if createForceFlag {
+		// Skip capacity checks; treat all subscription/region combos as candidates.
+		slog.Info("skipping capacity checks (--force)")
+		for _, sub := range subs {
+			for _, region := range regions {
+				candidates = append(candidates, regionCandidate{
+					region:       region,
+					subscription: sub,
+				})
+			}
+		}
+	} else {
+		// Run capacity checks (reuse find logic).
+		input := &capacity.CheckInput{
+			Subscriptions: subs,
+			VMSKUs:        []string{skuName},
+			Regions:       regions,
+			Scale:         createScaleFlag,
+			Parallelism:   createParallelismFlag,
+		}
+
+		results := capacity.Run(ctx, cred, input)
+
+		// Display quota results (reuse find output).
+		output.PrintResults(results, verbose)
+
+		for _, r := range results {
+			if r.HasCapacity() {
+				candidates = append(candidates, regionCandidate{
+					region:       r.Region,
+					subscription: r.Subscription,
+				})
+			}
 		}
 	}
 
